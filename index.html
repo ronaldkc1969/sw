@@ -36,10 +36,12 @@
       padding: 16px;
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      max-width: 800px; /* 見やすさのため追加 */
     }
     .summary {
       margin-top: 10px;
       font-size: 14px;
+      font-weight: bold;
     }
   </style>
 </head>
@@ -85,10 +87,8 @@
   </div>
 
   <script>
-    // データ格納用： { day: 1〜31, name: "阪口", minutes: 合計分 }
     const records = [];
 
-    // 名前ごとの色
     const colorMap = {
       "阪口": "rgba(255,99,132,0.7)",
       "坂東": "rgba(54,162,235,0.7)",
@@ -99,7 +99,6 @@
     const ctx = document.getElementById("studyChart").getContext("2d");
     let studyChart = null;
 
-    // グラフ更新（氏名ごとに合算）
     function updateChart() {
       const summaryEl = document.getElementById("summary");
 
@@ -125,20 +124,21 @@
       );
 
       const labels = aggregated.map(r => r.name);
-      const data = aggregated.map(r => Math.round((r.minutes / 60) * 10) / 10);
+      const chartData = aggregated.map(r => Math.round((r.minutes / 60) * 10) / 10);
       const backgroundColors = aggregated.map(r => colorMap[r.name] || "rgba(150,150,150,0.7)");
 
       if (studyChart) {
         studyChart.destroy();
       }
 
+      // 修正箇所: 第二引数のオブジェクトに data キーが欠落していました
       studyChart = new Chart(ctx, {
         type: "bar",
-         {
+        data: {
           labels: labels,
           datasets: [{
             label: "勉強時間（時間）",
-             data,
+            data: chartData,
             backgroundColor: backgroundColors,
             borderColor: backgroundColors.map(c => c.replace("0.7", "1")),
             borderWidth: 1
@@ -147,19 +147,12 @@
         options: {
           responsive: true,
           scales: {
-            x: {
-              grid: { color: "rgba(0,0,0,0.1)" }
-            },
             y: {
               beginAtZero: true,
-              title: { display: true, text: "時間" }
+              title: { display: true, text: "時間 (h)" }
             }
           },
           plugins: {
-            title: {
-              display: true,
-              text: "やるかやらないかではなく、やるかやるかもっとやるか"
-            },
             legend: { display: false },
             tooltip: {
               callbacks: {
@@ -178,11 +171,9 @@
       const totalMinutes = records.reduce((sum, r) => sum + r.minutes, 0);
       const totalH = Math.floor(totalMinutes / 60);
       const totalM = totalMinutes % 60;
-      summaryEl.textContent =
-        `1月合計勉強時間（全員）：${totalH}時間${totalM}分`;
+      summaryEl.textContent = `1月合計勉強時間（全員）：${totalH}時間${totalM}分`;
     }
 
-    // 追加ボタン
     document.getElementById("addBtn").addEventListener("click", () => {
       const name = document.getElementById("name").value;
       const day = parseInt(document.getElementById("day").value, 10);
@@ -193,18 +184,10 @@
         alert("日にちは1〜31で入力してください。");
         return;
       }
-      if (Number.isNaN(hour) || hour < 0 || hour > 24) {
-        alert("時間は0〜24で入力してください。");
-        return;
-      }
-      if (Number.isNaN(minute) || minute < 0 || minute > 59) {
-        alert("分は0〜59で入力してください。");
-        return;
-      }
-
-      const totalMinutes = hour * 60 + minute;
+      const totalMinutes = (Number.isNaN(hour) ? 0 : hour) * 60 + (Number.isNaN(minute) ? 0 : minute);
+      
       if (totalMinutes === 0) {
-        alert("勉強時間が0分です。");
+        alert("勉強時間を入力してください。");
         return;
       }
 
@@ -218,14 +201,13 @@
       updateChart();
     });
 
-    // 全消去ボタン
     document.getElementById("clearBtn").addEventListener("click", () => {
       if (!confirm("全ての記録を削除しますか？")) return;
       records.length = 0;
       updateChart();
     });
 
-    // ★テスト用に最初から1件入れてグラフを出す
+    // 初期データ投入
     records.push({ day: 1, name: "阪口", minutes: 60 });
     updateChart();
   </script>
