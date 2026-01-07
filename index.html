@@ -1,198 +1,261 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>実習日誌WEBアプリ</title>
+  <meta charset="UTF-8" />
+  <title>やるかやらないかではなく、やるかやるかもっとやるか</title>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- [web:15] -->
   <style>
-    body { font-family: system-ui, sans-serif; margin: 20px; }
-    h1 { font-size: 20px; }
-    label { display: block; margin-top: 8px; }
-    input[type="text"], input[type="date"], textarea {
-      width: 100%; padding: 6px; box-sizing: border-box;
+    body {
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      margin: 20px;
+      background: #f5f5f5;
     }
-    textarea { height: 120px; }
-    button { margin-top: 10px; padding: 6px 12px; }
-    .entry { border: 1px solid #ccc; padding: 8px; margin-top: 8px; }
-    .entry-header { display: flex; justify-content: space-between; }
-    .small { font-size: 12px; color: #555; }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 16px;
+    }
+    .form-container {
+      background: #fff;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    label {
+      display: inline-block;
+      margin-right: 8px;
+      margin-top: 8px;
+    }
+    select, button {
+      margin-top: 8px;
+      margin-right: 8px;
+      padding: 4px 8px;
+    }
+    #chartContainer {
+      background: #fff;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .summary {
+      margin-top: 10px;
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
+  <h1>やるかやらないかではなく、やるかやるかもっとやるか</h1>
 
-<h1>実習日誌入力</h1>
+  <div class="form-container">
+    <div>
+      <label for="name">名前：</label>
+      <select id="name">
+        <option value="阪口">阪口</option>
+        <option value="坂東">坂東</option>
+        <option value="松尾">松尾</option>
+        <option value="中井">中井</option>
+      </select>
+    </div>
 
-<form id="diary-form">
-  <input type="hidden" id="entry-id">
-  <label>
-    学籍番号（必須）:
-    <input type="text" id="student-id" required>
-  </label>
-  <label>
-    日付:
-    <input type="date" id="date">
-  </label>
-  <label>
-    実習内容:
-    <textarea id="content"></textarea>
-  </label>
-  <button type="submit" id="save-button">保存</button>
-  <button type="button" id="clear-form">新規入力に戻す</button>
-</form>
+    <div>
+      <label for="day">日にち（1月）：</label>
+      <select id="day"></select>
+    </div>
 
-<hr>
+    <div>
+      <label for="hour">時間：</label>
+      <select id="hour"></select>
+      <span>時間</span>
 
-<h2>日誌一覧</h2>
+      <label for="minute">分：</label>
+      <select id="minute"></select>
+      <span>分</span>
+    </div>
 
-<label>
-  学籍番号で絞り込み:
-  <input type="text" id="filter-student-id" placeholder="例: 2023001">
-</label>
-<button type="button" id="apply-filter">絞り込み</button>
-<button type="button" id="clear-filter">全件表示</button>
+    <div>
+      <button id="addBtn">追加</button>
+      <button id="clearBtn">全消去</button>
+    </div>
+  </div>
 
-<div id="entries"></div>
+  <div id="chartContainer">
+    <canvas id="studyChart"></canvas>
+    <div class="summary" id="summary"></div>
+  </div>
 
-<script>
-  const STORAGE_KEY = "practicum_diary_entries";
-
-  function loadEntries() {
-    const json = localStorage.getItem(STORAGE_KEY);
-    if (!json) return [];
-    try {
-      return JSON.parse(json);
-    } catch (e) {
-      console.error("JSON parse error", e);
-      return [];
-    }
-  }
-
-  function saveEntries(entries) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-  }
-
-  function renderEntries(filterStudentId = "") {
-    const entries = loadEntries();
-    const container = document.getElementById("entries");
-    container.innerHTML = "";
-
-    const filtered = filterStudentId
-      ? entries.filter(e => e.studentId === filterStudentId)
-      : entries;
-
-    if (filtered.length === 0) {
-      container.textContent = "該当する日誌はありません。";
-      return;
+  <script>
+    // 1〜31日の選択肢を作成
+    const daySelect = document.getElementById("day");
+    for (let d = 1; d <= 31; d++) {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.textContent = d + "日";
+      daySelect.appendChild(opt);
     }
 
-    filtered
-      .sort((a, b) => (a.date || "").localeCompare(b.date || ""))
-      .forEach(entry => {
-        const div = document.createElement("div");
-        div.className = "entry";
-
-        const header = document.createElement("div");
-        header.className = "entry-header";
-
-        const left = document.createElement("div");
-        left.innerHTML =
-          `<div><strong>${entry.studentId}</strong></div>` +
-          `<div class="small">${entry.date || "日付未入力"}</div>`;
-
-        const right = document.createElement("div");
-        const editBtn = document.createElement("button");
-        editBtn.textContent = "編集";
-        editBtn.addEventListener("click", () => loadToForm(entry.id));
-        right.appendChild(editBtn);
-
-        header.appendChild(left);
-        header.appendChild(right);
-
-        const body = document.createElement("div");
-        body.textContent = entry.content || "";
-
-        div.appendChild(header);
-        div.appendChild(body);
-        container.appendChild(div);
-      });
-  }
-
-  function loadToForm(id) {
-    const entries = loadEntries();
-    const target = entries.find(e => e.id === id);
-    if (!target) return;
-
-    document.getElementById("entry-id").value = target.id;
-    document.getElementById("student-id").value = target.studentId;
-    document.getElementById("date").value = target.date || "";
-    document.getElementById("content").value = target.content || "";
-    document.getElementById("save-button").textContent = "更新";
-  }
-
-  function clearForm() {
-    document.getElementById("entry-id").value = "";
-    document.getElementById("student-id").value = "";
-    document.getElementById("date").value = "";
-    document.getElementById("content").value = "";
-    document.getElementById("save-button").textContent = "保存";
-  }
-
-  document.getElementById("diary-form").addEventListener("submit", (e) => {
-    e.preventDefault();
-
-    const entryId = document.getElementById("entry-id").value;
-    const studentId = document.getElementById("student-id").value.trim();
-    const date = document.getElementById("date").value;
-    const content = document.getElementById("content").value;
-
-    if (!studentId) {
-      alert("学籍番号は必須です。");
-      return;
+    // 時間 0〜12時間
+    const hourSelect = document.getElementById("hour");
+    for (let h = 0; h <= 12; h++) {
+      const opt = document.createElement("option");
+      opt.value = h;
+      opt.textContent = h;
+      hourSelect.appendChild(opt);
     }
 
-    const entries = loadEntries();
+    // 分 0,5,10,...,55分
+    const minuteSelect = document.getElementById("minute");
+    for (let m = 0; m < 60; m += 5) {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = m;
+      minuteSelect.appendChild(opt);
+    }
 
-    if (entryId) {
-      const index = entries.findIndex(e => e.id === entryId);
-      if (index !== -1) {
-        entries[index].studentId = studentId;
-        entries[index].date = date;
-        entries[index].content = content;
+    // データ格納用： { day: 1〜31, name: "阪口", minutes: 合計分 }
+    const records = [];
+
+    // 名前ごとの色
+    const colorMap = {
+      "阪口": "rgba(255,99,132,0.7)",
+      "坂東": "rgba(54,162,235,0.7)",
+      "松尾": "rgba(75,192,192,0.7)",
+      "中井": "rgba(255,206,86,0.7)"
+    };
+
+    // Chart.js 用のインスタンス
+    const ctx = document.getElementById("studyChart").getContext("2d");
+    let studyChart = null;
+
+    // グラフを更新して描画する関数
+    function updateChart() {
+      if (records.length === 0) {
+        if (studyChart) {
+          studyChart.destroy();
+          studyChart = null;
+        }
+        document.getElementById("summary").textContent = "";
+        return;
       }
-    } else {
-      const newEntry = {
-        id: "id_" + Date.now(),
-        studentId,
-        date,
-        content,
-        createdAt: new Date().toISOString()
-      };
-      entries.push(newEntry);
+
+      // 日付順・名前順でソート（棒の順番を安定させる）
+      const sorted = [...records].sort((a, b) => {
+        if (a.day !== b.day) return a.day - b.day;
+        return a.name.localeCompare(b.name, "ja");
+      });
+
+      const labels = sorted.map(r => `1月${r.day}日 ${r.name}`);
+      const data = sorted.map(r => Math.round((r.minutes / 60) * 10) / 10); // 時間に変換して少数1桁
+      const backgroundColors = sorted.map(r => colorMap[r.name]);
+
+      // 既存チャートがあれば破棄
+      if (studyChart) {
+        studyChart.destroy();
+      }
+
+      studyChart = new Chart(ctx, { // [web:15]
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: "勉強時間（時間）",
+            data: data,
+            backgroundColor: backgroundColors,
+            borderColor: backgroundColors.map(c => c.replace("0.7", "1")),
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: {
+              ticks: {
+                maxRotation: 60,
+                minRotation: 60
+              },
+              grid: {
+                // 日付ごとに縦線の濃さを変えて「区切り線」のイメージに
+                color: (context) => {
+                  const index = context.index;
+                  const label = context.chart.data.labels[index];
+                  const day = parseInt(label.split("月")[1]);
+                  // 5日ごとに濃い線
+                  return day % 5 === 0 ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.1)";
+                }
+              }
+            },
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: "時間"
+              }
+            }
+          },
+          plugins: {
+            title: {
+              display: true,
+              text: "やるかやらないかではなく、やるかやるかもっとやるか"
+            },
+            legend: {
+              display: false
+            },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const idx = context.dataIndex;
+                  const rec = sorted[idx];
+                  const h = Math.floor(rec.minutes / 60);
+                  const m = rec.minutes % 60;
+                  return `${rec.name}: ${h}時間${m}分`;
+                }
+              }
+            }
+          }
+        }
+      });
+
+      // 合計時間を表示
+      const totalMinutes = records.reduce((sum, r) => sum + r.minutes, 0);
+      const totalH = Math.floor(totalMinutes / 60);
+      const totalM = totalMinutes % 60;
+      document.getElementById("summary").textContent =
+        `1月合計勉強時間：${totalH}時間${totalM}分`;
     }
 
-    saveEntries(entries);
-    clearForm();
-    const filterId = document.getElementById("filter-student-id").value.trim();
-    renderEntries(filterId || undefined);
-  });
+    // 「追加」ボタン
+    document.getElementById("addBtn").addEventListener("click", () => {
+      const name = document.getElementById("name").value;
+      const day = parseInt(document.getElementById("day").value, 10);
+      const hour = parseInt(document.getElementById("hour").value, 10);
+      const minute = parseInt(document.getElementById("minute").value, 10);
 
-  document.getElementById("clear-form").addEventListener("click", () => {
-    clearForm();
-  });
+      const totalMinutes = hour * 60 + minute;
+      if (totalMinutes === 0) {
+        alert("勉強時間が0分です。");
+        return;
+      }
 
-  document.getElementById("apply-filter").addEventListener("click", () => {
-    const id = document.getElementById("filter-student-id").value.trim();
-    renderEntries(id);
-  });
+      // 同じ日・同じ名前があれば加算、それ以外は新規レコード
+      const existing = records.find(r => r.day === day && r.name === name);
+      if (existing) {
+        existing.minutes += totalMinutes;
+      } else {
+        records.push({ day, name, minutes: totalMinutes });
+      }
 
-  document.getElementById("clear-filter").addEventListener("click", () => {
-    document.getElementById("filter-student-id").value = "";
-    renderEntries();
-  });
+      updateChart();
+    });
 
-  window.addEventListener("load", () => {
-    renderEntries();
-  });
-</script>
+    // 「全消去」ボタン
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      if (!confirm("全ての記録を削除しますか？")) return;
+      records.length = 0;
+      updateChart();
+    });
 
+    // 初期描画
+    updateChart();
+  </script>
 </body>
-</html>
+</html
