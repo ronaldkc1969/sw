@@ -1,261 +1,92 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-  <meta charset="UTF-8" />
-  <title>やるかやらないかではなく、やるかやるかもっとやるか</title>
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- [web:15] -->
-  <style>
-    body {
-      font-family: "Helvetica Neue", Arial, sans-serif;
-      margin: 20px;
-      background: #f5f5f5;
+// グラフを更新して描画する関数（氏名ごとに合算）
+function updateChart() {
+  if (records.length === 0) {
+    if (studyChart) {
+      studyChart.destroy();
+      studyChart = null;
     }
-    h1 {
-      font-size: 20px;
-      margin-bottom: 16px;
+    document.getElementById("summary").textContent = "";
+    return;
+  }
+
+  // 名前ごとに合計（minutesを加算）
+  const byName = {};
+  records.forEach(r => {
+    if (!byName[r.name]) {
+      byName[r.name] = { name: r.name, minutes: 0 };
     }
-    .form-container {
-      background: #fff;
-      padding: 16px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      margin-bottom: 20px;
-    }
-    label {
-      display: inline-block;
-      margin-right: 8px;
-      margin-top: 8px;
-    }
-    select, button {
-      margin-top: 8px;
-      margin-right: 8px;
-      padding: 4px 8px;
-    }
-    #chartContainer {
-      background: #fff;
-      padding: 16px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .summary {
-      margin-top: 10px;
-      font-size: 14px;
-    }
-  </style>
-</head>
-<body>
-  <h1>やるかやらないかではなく、やるかやるかもっとやるか</h1>
+    byName[r.name].minutes += r.minutes;
+  });
 
-  <div class="form-container">
-    <div>
-      <label for="name">名前：</label>
-      <select id="name">
-        <option value="阪口">阪口</option>
-        <option value="坂東">坂東</option>
-        <option value="松尾">松尾</option>
-        <option value="中井">中井</option>
-      </select>
-    </div>
+  // 表示用に配列化＆ソート（名前順）
+  const aggregated = Object.values(byName).sort((a, b) =>
+    a.name.localeCompare(b.name, "ja")
+  );
 
-    <div>
-      <label for="day">日にち（1月）：</label>
-      <select id="day"></select>
-    </div>
+  const labels = aggregated.map(r => r.name);
+  const data = aggregated.map(r => Math.round((r.minutes / 60) * 10) / 10); // 時間
+  const backgroundColors = aggregated.map(r => colorMap[r.name]);
 
-    <div>
-      <label for="hour">時間：</label>
-      <select id="hour"></select>
-      <span>時間</span>
+  // 既存チャートがあれば破棄
+  if (studyChart) {
+    studyChart.destroy();
+  }
 
-      <label for="minute">分：</label>
-      <select id="minute"></select>
-      <span>分</span>
-    </div>
-
-    <div>
-      <button id="addBtn">追加</button>
-      <button id="clearBtn">全消去</button>
-    </div>
-  </div>
-
-  <div id="chartContainer">
-    <canvas id="studyChart"></canvas>
-    <div class="summary" id="summary"></div>
-  </div>
-
-  <script>
-    // 1〜31日の選択肢を作成
-    const daySelect = document.getElementById("day");
-    for (let d = 1; d <= 31; d++) {
-      const opt = document.createElement("option");
-      opt.value = d;
-      opt.textContent = d + "日";
-      daySelect.appendChild(opt);
-    }
-
-    // 時間 0〜12時間
-    const hourSelect = document.getElementById("hour");
-    for (let h = 0; h <= 12; h++) {
-      const opt = document.createElement("option");
-      opt.value = h;
-      opt.textContent = h;
-      hourSelect.appendChild(opt);
-    }
-
-    // 分 0,5,10,...,55分
-    const minuteSelect = document.getElementById("minute");
-    for (let m = 0; m < 60; m += 5) {
-      const opt = document.createElement("option");
-      opt.value = m;
-      opt.textContent = m;
-      minuteSelect.appendChild(opt);
-    }
-
-    // データ格納用： { day: 1〜31, name: "阪口", minutes: 合計分 }
-    const records = [];
-
-    // 名前ごとの色
-    const colorMap = {
-      "阪口": "rgba(255,99,132,0.7)",
-      "坂東": "rgba(54,162,235,0.7)",
-      "松尾": "rgba(75,192,192,0.7)",
-      "中井": "rgba(255,206,86,0.7)"
-    };
-
-    // Chart.js 用のインスタンス
-    const ctx = document.getElementById("studyChart").getContext("2d");
-    let studyChart = null;
-
-    // グラフを更新して描画する関数
-    function updateChart() {
-      if (records.length === 0) {
-        if (studyChart) {
-          studyChart.destroy();
-          studyChart = null;
-        }
-        document.getElementById("summary").textContent = "";
-        return;
-      }
-
-      // 日付順・名前順でソート（棒の順番を安定させる）
-      const sorted = [...records].sort((a, b) => {
-        if (a.day !== b.day) return a.day - b.day;
-        return a.name.localeCompare(b.name, "ja");
-      });
-
-      const labels = sorted.map(r => `1月${r.day}日 ${r.name}`);
-      const data = sorted.map(r => Math.round((r.minutes / 60) * 10) / 10); // 時間に変換して少数1桁
-      const backgroundColors = sorted.map(r => colorMap[r.name]);
-
-      // 既存チャートがあれば破棄
-      if (studyChart) {
-        studyChart.destroy();
-      }
-
-      studyChart = new Chart(ctx, { // [web:15]
-        type: "bar",
-        data: {
-          labels: labels,
-          datasets: [{
-            label: "勉強時間（時間）",
-            data: data,
-            backgroundColor: backgroundColors,
-            borderColor: backgroundColors.map(c => c.replace("0.7", "1")),
-            borderWidth: 1
-          }]
+  studyChart = new Chart(ctx, { // [web:15]
+    type: "bar",
+     {
+      labels: labels,
+      datasets: [{
+        label: "勉強時間（時間）",
+         data,
+        backgroundColor: backgroundColors,
+        borderColor: backgroundColors.map(c => c.replace("0.7", "1")),
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: {
+          grid: {
+            // 氏名ごと1本なので、シンプルに薄い線
+            color: "rgba(0,0,0,0.1)"
+          }
         },
-        options: {
-          responsive: true,
-          scales: {
-            x: {
-              ticks: {
-                maxRotation: 60,
-                minRotation: 60
-              },
-              grid: {
-                // 日付ごとに縦線の濃さを変えて「区切り線」のイメージに
-                color: (context) => {
-                  const index = context.index;
-                  const label = context.chart.data.labels[index];
-                  const day = parseInt(label.split("月")[1]);
-                  // 5日ごとに濃い線
-                  return day % 5 === 0 ? "rgba(0,0,0,0.4)" : "rgba(0,0,0,0.1)";
-                }
-              }
-            },
-            y: {
-              beginAtZero: true,
-              title: {
-                display: true,
-                text: "時間"
-              }
-            }
-          },
-          plugins: {
-            title: {
-              display: true,
-              text: "やるかやらないかではなく、やるかやるかもっとやるか"
-            },
-            legend: {
-              display: false
-            },
-            tooltip: {
-              callbacks: {
-                label: (context) => {
-                  const idx = context.dataIndex;
-                  const rec = sorted[idx];
-                  const h = Math.floor(rec.minutes / 60);
-                  const m = rec.minutes % 60;
-                  return `${rec.name}: ${h}時間${m}分`;
-                }
-              }
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: "時間"
+          }
+        }
+      },
+      plugins: {
+        title: {
+          display: true,
+          text: "やるかやらないかではなく、やるかやるかもっとやるか"
+        },
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: (context) => {
+              const rec = aggregated[context.dataIndex];
+              const h = Math.floor(rec.minutes / 60);
+              const m = rec.minutes % 60;
+              return `${rec.name}: ${h}時間${m}分`;
             }
           }
         }
-      });
-
-      // 合計時間を表示
-      const totalMinutes = records.reduce((sum, r) => sum + r.minutes, 0);
-      const totalH = Math.floor(totalMinutes / 60);
-      const totalM = totalMinutes % 60;
-      document.getElementById("summary").textContent =
-        `1月合計勉強時間：${totalH}時間${totalM}分`;
+      }
     }
+  });
 
-    // 「追加」ボタン
-    document.getElementById("addBtn").addEventListener("click", () => {
-      const name = document.getElementById("name").value;
-      const day = parseInt(document.getElementById("day").value, 10);
-      const hour = parseInt(document.getElementById("hour").value, 10);
-      const minute = parseInt(document.getElementById("minute").value, 10);
-
-      const totalMinutes = hour * 60 + minute;
-      if (totalMinutes === 0) {
-        alert("勉強時間が0分です。");
-        return;
-      }
-
-      // 同じ日・同じ名前があれば加算、それ以外は新規レコード
-      const existing = records.find(r => r.day === day && r.name === name);
-      if (existing) {
-        existing.minutes += totalMinutes;
-      } else {
-        records.push({ day, name, minutes: totalMinutes });
-      }
-
-      updateChart();
-    });
-
-    // 「全消去」ボタン
-    document.getElementById("clearBtn").addEventListener("click", () => {
-      if (!confirm("全ての記録を削除しますか？")) return;
-      records.length = 0;
-      updateChart();
-    });
-
-    // 初期描画
-    updateChart();
-  </script>
-</body>
-</html
+  // 合計時間（全員分の合計）はこれまで通り
+  const totalMinutes = records.reduce((sum, r) => sum + r.minutes, 0);
+  const totalH = Math.floor(totalMinutes / 60);
+  const totalM = totalMinutes % 60;
+  document.getElementById("summary").textContent =
+    `1月合計勉強時間（全員）：${totalH}時間${totalM}分`;
+}
