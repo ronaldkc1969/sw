@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>やるかやらないかではなく、やるかやるかもっとやるか</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- [web:44] -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
       font-family: "Helvetica Neue", Arial, sans-serif;
@@ -101,12 +101,14 @@
 
     // グラフ更新（氏名ごとに合算）
     function updateChart() {
+      const summaryEl = document.getElementById("summary");
+
       if (records.length === 0) {
         if (studyChart) {
           studyChart.destroy();
           studyChart = null;
         }
-        document.getElementById("summary").textContent = "";
+        summaryEl.textContent = "まだデータがありません。入力して「追加」を押してください。";
         return;
       }
 
@@ -124,13 +126,13 @@
 
       const labels = aggregated.map(r => r.name);
       const data = aggregated.map(r => Math.round((r.minutes / 60) * 10) / 10);
-      const backgroundColors = aggregated.map(r => colorMap[r.name]);
+      const backgroundColors = aggregated.map(r => colorMap[r.name] || "rgba(150,150,150,0.7)");
 
       if (studyChart) {
         studyChart.destroy();
       }
 
-      studyChart = new Chart(ctx, { // [web:15][web:41]
+      studyChart = new Chart(ctx, {
         type: "bar",
          {
           labels: labels,
@@ -176,7 +178,7 @@
       const totalMinutes = records.reduce((sum, r) => sum + r.minutes, 0);
       const totalH = Math.floor(totalMinutes / 60);
       const totalM = totalMinutes % 60;
-      document.getElementById("summary").textContent =
+      summaryEl.textContent =
         `1月合計勉強時間（全員）：${totalH}時間${totalM}分`;
     }
 
@@ -223,6 +225,8 @@
       updateChart();
     });
 
+    // ★テスト用に最初から1件入れてグラフを出す
+    records.push({ day: 1, name: "阪口", minutes: 60 });
     updateChart();
   </script>
 </body>
