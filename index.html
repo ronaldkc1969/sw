@@ -36,7 +36,7 @@
       padding: 16px;
       border-radius: 8px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      max-width: 800px; /* 見やすさのため追加 */
+      max-width: 800px;
     }
     .summary {
       margin-top: 10px;
@@ -77,92 +77,157 @@
 
     <div>
       <button id="addBtn" type="button">追加</button>
-      <button id="clearBtn" type="button">全消去</button>
-    </div>
+      </div>
   </div>
 
   <div id="chartContainer">
     <canvas id="studyChart"></canvas>
-    <div class="summary" id="summary"></div>
+    <div class="summary" id="summary">データ読み込み中...</div>
   </div>
 
- <script>
-  // ★ここにGASでデプロイしたURLを貼り付けてください
-  const API_URL = "https://script.google.com/macros/s/AKfycbxcJm2e11vk-oaJ9Vebt-qBpnJA3vmdBFDXDQ6LH0coJbZh-DSsMwTO_I352pnrlcuB/exec";
+  <script>
+    // ★ここにGASでデプロイしたURLを貼り付けてください
+    const API_URL = "https://script.google.com/macros/s/AKfycbxcJm2e11vk-oaJ9Vebt-qBpnJA3vmdBFDXDQ6LH0coJbZh-DSsMwTO_I352pnrlcuB/exec";
 
-  let records = [];
-  const colorMap = { "阪口": "rgba(255,99,132,0.7)", "坂東": "rgba(54,162,235,0.7)", "松尾": "rgba(75,192,192,0.7)", "中井": "rgba(255,206,86,0.7)" };
-  const ctx = document.getElementById("studyChart").getContext("2d");
-  let studyChart = null;
-
-  // 1. データをサーバー(GAS)から読み込む
-  async function loadData() {
-    try {
-      const response = await fetch(API_URL);
-      records = await response.json();
-      updateChart();
-    } catch (e) {
-      console.error("データの読み込みに失敗しました", e);
-    }
-  }
-
-  // 2. データをサーバー(GAS)へ保存する
-  async function saveData(newData) {
-    await fetch(API_URL, {
-      method: "POST",
-      body: JSON.stringify(newData)
-    });
-    await loadData(); // 最新状態に更新
-  }
-
-  function updateChart() {
-    const summaryEl = document.getElementById("summary");
-    if (records.length === 0) {
-      if (studyChart) studyChart.destroy();
-      summaryEl.textContent = "データ取得中またはデータなし...";
-      return;
-    }
-
-    const byName = {};
-    records.forEach(r => {
-      if (!byName[r.name]) byName[r.name] = { name: r.name, minutes: 0 };
-      byName[r.name].minutes += Number(r.minutes);
-    });
-
-    const aggregated = Object.values(byName);
-    const labels = aggregated.map(r => r.name);
-    const chartData = aggregated.map(r => Math.round((r.minutes / 60) * 10) / 10);
-
-    if (studyChart) studyChart.destroy();
-    studyChart = new Chart(ctx, {
-      type: "bar",
-      data: {
-        labels: labels,
-        datasets: [{
-          label: "勉強時間（時間）",
-          data: chartData,
-          backgroundColor: labels.map(l => colorMap[l] || "gray"),
-          borderWidth: 1
-        }]
-      },
-      options: { responsive: true }
-    });
-
-    const totalMinutes = records.reduce((sum, r) => sum + Number(r.minutes), 0);
-    summaryEl.textContent = `1月合計：${Math.floor(totalMinutes / 60)}時間${totalMinutes % 60}分`;
-  }
-
-  document.getElementById("addBtn").addEventListener("click", () => {
-    const newData = {
-      name: document.getElementById("name").value,
-      day: document.getElementById("day").value,
-      minutes: parseInt(document.getElementById("hour").value || 0) * 60 + parseInt(document.getElementById("minute").value || 0)
+    let records = [];
+    const colorMap = {
+      "阪口": "rgba(255,99,132,0.7)",
+      "坂東": "rgba(54,162,235,0.7)",
+      "松尾": "rgba(75,192,192,0.7)",
+      "中井": "rgba(255,206,86,0.7)"
     };
-    if (newData.minutes > 0) saveData(newData);
-  });
 
-  // 初回読み込み
-  loadData();
-</script>
+    const ctx = document.getElementById("studyChart").getContext("2d");
+    let studyChart = null;
+
+    // サーバーからデータを読み込む
+    async function loadData() {
+      try {
+        const response = await fetch(API_URL);
+        records = await response.json();
+        updateChart();
+      } catch (e) {
+        console.error("データの読み込みに失敗しました", e);
+        document.getElementById("summary").textContent = "データの読み込みに失敗しました。";
+      }
+    }
+
+    // サーバーへデータを保存する
+    async function saveData(newData) {
+      const btn = document.getElementById("addBtn");
+      btn.disabled = true;
+      btn.textContent = "保存中...";
+
+      try {
+        await fetch(API_URL, {
+          method: "POST",
+          body: JSON.stringify(newData)
+        });
+        await loadData(); // 完了後に再読み込みしてグラフ更新
+      } catch (e) {
+        alert("保存に失敗しました。");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "追加";
+      }
+    }
+
+    function updateChart() {
+      const summaryEl = document.getElementById("summary");
+
+      if (!records || records.length === 0) {
+        if (studyChart) studyChart.destroy();
+        summaryEl.textContent = "データがありません。";
+        return;
+      }
+
+      // 名前ごとに合算
+      const byName = {};
+      records.forEach(r => {
+        if (!byName[r.name]) {
+          byName[r.name] = { name: r.name, minutes: 0 };
+        }
+        byName[r.name].minutes += Number(r.minutes);
+      });
+
+      const aggregated = Object.values(byName).sort((a, b) =>
+        a.name.localeCompare(b.name, "ja")
+      );
+
+      const labels = aggregated.map(r => r.name);
+      const chartData = aggregated.map(r => Math.round((r.minutes / 60) * 10) / 10);
+      const backgroundColors = labels.map(name => colorMap[name] || "rgba(150,150,150,0.7)");
+
+      if (studyChart) {
+        studyChart.destroy();
+      }
+
+      studyChart = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [{
+            label: "勉強時間（時間）",
+            data: chartData,
+            backgroundColor: backgroundColors,
+            borderColor: backgroundColors.map(c => c.replace("0.7", "1")),
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: { display: true, text: "時間 (h)" }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (context) => {
+                  const rec = aggregated[context.dataIndex];
+                  const h = Math.floor(rec.minutes / 60);
+                  const m = rec.minutes % 60;
+                  return `${rec.name}: ${h}時間${m}分`;
+                }
+              }
+            }
+          }
+        }
+      });
+
+      const totalMinutes = records.reduce((sum, r) => sum + Number(r.minutes), 0);
+      const totalH = Math.floor(totalMinutes / 60);
+      const totalM = totalMinutes % 60;
+      summaryEl.textContent = `1月合計勉強時間（全員）：${totalH}時間${totalM}分`;
+    }
+
+    // 追加ボタンの動作
+    document.getElementById("addBtn").addEventListener("click", () => {
+      const name = document.getElementById("name").value;
+      const day = parseInt(document.getElementById("day").value, 10);
+      const hour = parseInt(document.getElementById("hour").value, 10) || 0;
+      const minute = parseInt(document.getElementById("minute").value, 10) || 0;
+
+      if (Number.isNaN(day) || day < 1 || day > 31) {
+        alert("日にちは1〜31で入力してください。");
+        return;
+      }
+      
+      const totalMinutes = hour * 60 + minute;
+      if (totalMinutes === 0) {
+        alert("勉強時間を入力してください。");
+        return;
+      }
+
+      const newData = { name, day, minutes: totalMinutes };
+      saveData(newData);
+    });
+
+    // 初回読み込み実行
+    loadData();
+  </script>
 </body>
 </html>
